@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Calendar as BigCalendar, momentLocalizer, Views } from "react-big-calendar";
 import moment from "moment";
 import "react-big-calendar/lib/css/react-big-calendar.css";
@@ -6,6 +6,9 @@ import { Modal, Button, Form, Navbar, Container, Row, Col } from "react-bootstra
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { LogOut } from "lucide-react"; // Import the LogOut icon
 import logo from './assets/images/logo.png';
+import { calendarService } from './services/calendarService';
+import BookingRequests from './components/booking/BookingRequests';
+import Chatbot from "./components/Chatbot/Chatbot";
 
 const localizer = momentLocalizer(moment);
 
@@ -33,6 +36,7 @@ const Header = ({ onSignOut }) => {
 />
           <strong>PICT Calendar</strong>
         </Navbar.Brand>
+        <h1><marquee>Thank you for your time.</marquee></h1>
         <Button 
           variant="danger" 
           size="sm" 
@@ -155,7 +159,7 @@ const YearlyCalendar = ({ events, onSelectDay }) => {
   );
 };
 
-// Sidebar Component
+// Updated Sidebar Component
 const Sidebar = ({ events, approveEvent, modifyEvent, cancelEvent }) => {
   const formatEventTime = (start, end) => {
     return `${moment(start).format('HH:mm')} - ${moment(end).format('HH:mm')}`;
@@ -170,7 +174,10 @@ const Sidebar = ({ events, approveEvent, modifyEvent, cancelEvent }) => {
       height: "calc(100vh - 56px)", 
       overflowY: "auto" 
     }}>
-      {/* Pending Requests Section */}
+      {/* Add BookingRequests component here */}
+      <BookingRequests />
+      
+      {/* Existing Pending and Approved Requests Sections */}
       <div style={{ marginBottom: "30px" }}>
         <h4 style={{ 
           fontSize: "18px", 
@@ -329,50 +336,7 @@ const MonthEventComponent = ({ event }) => (
 
 // Main Calendar Component
 const MyCalendar = () => {
-  const [events, setEvents] = useState([
-    {
-      id: 1,
-      title: "Meeting",
-      club: "Tech Club",
-      reason: "Discussion",
-      room: "Room 101 - Conference Hall",
-      start: new Date(2024, 1, 15, 10, 30),
-      end: new Date(2024, 1, 15, 11, 45),
-      status: "Pending"
-    },
-    {
-      id: 2,
-      title: "Workshop",
-      club: "Design Club",
-      reason: "Training",
-      room: "Room 202 - Seminar Hall",
-      start: new Date(2024, 2, 20, 14, 15),
-      end: new Date(2024, 2, 20, 16, 30),
-      status: "Approved"
-    },
-    // Adding more sample events to demonstrate multiple events on same day
-    {
-      id: 3,
-      title: "Seminar",
-      club: "AI Club",
-      reason: "Guest Lecture",
-      room: "Room 404 - Auditorium",
-      start: new Date(2024, 2, 20, 10, 0),
-      end: new Date(2024, 2, 20, 12, 0),
-      status: "Pending"
-    },
-    {
-      id: 4,
-      title: "Hackathon",
-      club: "Coding Club",
-      reason: "Competition",
-      room: "Room 303 - Computer Lab",
-      start: new Date(2024, 2, 20, 18, 0),
-      end: new Date(2024, 2, 20, 22, 0),
-      status: "Approved"
-    }
-  ]);
-
+  const [events, setEvents] = useState([]);
   const [currentView, setCurrentView] = useState(Views.DAY);
   const [showModal, setShowModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -380,7 +344,7 @@ const MyCalendar = () => {
     title: "",
     club: "",
     reason: "",
-    room: AVAILABLE_ROOMS[0], // Default to first room
+    room: AVAILABLE_ROOMS[0],
     start: null,
     end: null,
     startHour: "09",
@@ -388,6 +352,43 @@ const MyCalendar = () => {
     endHour: "10",
     endMinute: "00"
   });
+  const [availableRooms, setAvailableRooms] = useState([]);
+  const [token, setToken] = useState("");
+  useEffect(() => {
+    const fetchEvents = async () => {
+
+      try {
+        const eventsData = await calendarService.getEvents();
+        setEvents(eventsData.map(event => ({
+          ...event,
+          start: new Date(event.start),
+          end: new Date(event.end)
+        })));
+      } catch (error) {
+        console.error('Error fetching events:', error);
+      }
+    };
+    // localStorage.getItem("token"); 
+    setToken(localStorage.getItem("token"));
+    fetchEvents();
+  }, []);
+  console.log(token);
+  useEffect(() => {
+    const fetchAvailableRooms = async () => {
+      const date = new Date(); // Replace with the selected date
+      const startTime = "09:00"; // Replace with the selected start time
+      const endTime = "10:00"; // Replace with the selected end time
+
+      try {
+        const rooms = await calendarService.getAvailableRooms(date.toISOString().split('T')[0], startTime, endTime);
+        setAvailableRooms(rooms);
+      } catch (error) {
+        console.error('Error fetching available rooms:', error);
+      }
+    };
+
+    fetchAvailableRooms();
+  }, []);
 
   const hours = Array.from({ length: 24 }, (_, i) => 
     i.toString().padStart(2, '0')
@@ -606,6 +607,9 @@ Status: ${event.status}`;
             </Button>
           </div>
 
+          
+
+
           {currentView === "year" ? (
             <YearlyCalendar 
               events={events} 
@@ -621,6 +625,7 @@ Status: ${event.status}`;
               onSelectSlot={handleSelectSlot}
               views={[Views.DAY, Views.WEEK, Views.MONTH]}
               view={currentView}
+              onView={setCurrentView}
               date={selectedDate}
               onNavigate={date => setSelectedDate(date)}
               eventPropGetter={eventStyleGetter}
@@ -644,13 +649,14 @@ Status: ${event.status}`;
                 setSelectedDate(event.start);
                 setCurrentView(Views.DAY);
               }}
-              // Key configurations to show multiple events in month view
               showMultiDayTimes={true}
               length={60}
             />
           )}
         </div>
       </div>
+
+      <Chatbot />
 
       <Modal show={showModal} onHide={() => setShowModal(false)}>
         <Modal.Header closeButton>
